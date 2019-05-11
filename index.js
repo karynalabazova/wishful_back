@@ -22,9 +22,11 @@ var userSchema = new mongoose.Schema({
   password: String,
   lists: {
     title: String,
+    deleted: Boolean,
     items: [
       {
-        text: String
+        text: String,
+        checked: Boolean
       }
     ]
   }
