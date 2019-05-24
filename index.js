@@ -14,6 +14,7 @@ function jwtWare() {
         path: [
             // public routes that don't require authentication
             '/login',
+            '/join',
             '/'
         ]
     });
@@ -85,6 +86,20 @@ async function authenticate({ username, password }) { //контроллер а�
         };
     }
 }
+async function join ({ username, password }) {
+  console.log(username, password)
+  let user = await new User({nick: username, password: shajs('sha256').update(password).update(salt).digest('hex')})
+  await user.save()
+  if (user) {
+    const token = jwt.sign({ sub: user.id }, config.secret); //подписывам токен нашим ключем
+    const nick = user.nick
+    const { password, ...userWithoutPassword } = user;
+    return { //отсылаем интересную инфу
+      nick,
+      token
+      };
+    }
+}
 
 app.use(cors());
 const bodyParser = require('body-parser')
@@ -98,9 +113,20 @@ app.use(function(req, res, next) {
 
 app.post('/login', async function (req, res, next) {
     authenticate(req.body)
-        .then(user => user ? res.json(user) : res.status(400).json({ message: 'Username or password is incorrect' }))
+        .then(user => user ? res.json(user) :
+          res.status(400).json({ message: 'Username or password is incorrect' }))
         .catch(err => next(err));
 });
+
+app.post('/join', async function (req, res, next){
+  let findUser = await User.find({nick: req.body.username})
+  console.log(findUser)
+  findUser.length > 1 ?
+    res.status(400).json({ message: 'User already exists' }) :
+      (join(req.body)
+          .then(user =>  res.json(user))
+          .catch(err => next(err)))
+})
 
 app.use(jwtWare());
 // (async () =>{
