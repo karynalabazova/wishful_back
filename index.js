@@ -154,6 +154,34 @@ app.post('/delete/:nick/:listName', async function (req, res){
   console.log(findLists)
   res.json(findLists)
 })
+
+app.route('/lists/:nick/:listName')
+.get(async function (req, res) {
+  let findUser = await User.findOne({nick: req.params.nick})
+  let findLists = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
+  res.send(findLists.items);
+  })
+.post(async function (req, res) {
+  console.log(req.body)
+  let findUser = await User.findOne({nick: req.params.nick})
+  let createdList = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
+  createdList.items.push({text: req.body.title})
+  await createdList.save()
+  res.send(createdList.items)
+});
+
+app.post('/check/:nick/:listName', async function (req, res){
+  let findUser = await User.findOne({nick: req.params.nick})
+  let findLists = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
+  findLists.items.map(x =>
+    (x.text === req.body.title ?
+      (x.checked === false ? x.checked = true : x.checked = false):
+        null)
+  )
+  await findLists.save()
+  console.log(findLists)
+  res.json(findLists)
+})
 // ;(async () =>{
 //   let newUser = new User
 //   newUser.nick ="user"
