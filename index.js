@@ -63,11 +63,12 @@ var listSchema = new mongoose.Schema({
       }
     ],
     title: String,
-    deleted: Boolean,
+    deleted: { type: Boolean, default: false },
     items: [
       {
         text: String,
-        checked: Boolean
+        checked: { type: Boolean, default: false }
+        //who
       }
     ]
 });
@@ -129,7 +130,31 @@ app.post('/join', async function (req, res, next){
 })
 
 app.use(jwtWare());
-// (async () =>{
+
+app.route('/lists/:nick')
+.get(async function (req, res) {
+  let findUser = await User.findOne({nick: req.params.nick})
+  let findLists = await List.find({owner: findUser._id, deleted: false})
+  res.send(findLists);
+  })
+.post(async function (req, res) {
+  let findUser = await User.findOne({nick: req.params.nick})
+  let createdList = await new List({
+    owner: findUser._id,
+    title : req.body.title
+  })
+  await createdList.save()
+  res.status(201).send(req.body)
+});
+
+app.post('/delete/:nick/:listName', async function (req, res){
+  let findUser = await User.findOne({nick: req.params.nick})
+  let findLists = await List.updateOne({owner: findUser._id, title: req.params.listName, deleted: false},
+    {deleted: true}, (err) => {});
+  console.log(findLists)
+  res.json(findLists)
+})
+// ;(async () =>{
 //   let newUser = new User
 //   newUser.nick ="user"
 //   newUser.password = setPassword("password")
