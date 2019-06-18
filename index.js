@@ -75,7 +75,6 @@ var listSchema = new mongoose.Schema({
 const List = mongoose.model('list', listSchema);
 
 async function authenticate({ username, password }) { //контроллер авторизации
-    console.log(username, password)
     let user = await User.findOne({nick: username, password: shajs('sha256').update(password).update(salt).digest('hex')})
     if (user) {
         const token = jwt.sign({ sub: user.id }, config.secret); //подписывам токен нашим ключем
@@ -88,7 +87,6 @@ async function authenticate({ username, password }) { //контроллер а�
     }
 }
 async function join ({ username, password }) {
-  console.log(username, password)
   let user = await new User({nick: username, password: shajs('sha256').update(password).update(salt).digest('hex')})
   await user.save()
   if (user) {
@@ -121,7 +119,6 @@ app.post('/login', async function (req, res, next) {
 
 app.post('/join', async function (req, res, next){
   let findUser = await User.find({nick: req.body.username})
-  console.log(findUser)
   findUser.length > 1 ?
     res.status(400).json({ message: 'User already exists' }) :
       (join(req.body)
@@ -131,25 +128,44 @@ app.post('/join', async function (req, res, next){
 
 app.use(jwtWare());
 
-app.route('/lists/:nick')
+
+app.route('/lists/:id')
 .get(async function (req, res) {
-  let findUser = await User.findOne({nick: req.params.nick})
-  let findLists = await List.find({owner: findUser._id, deleted: false})
-  res.send(findLists);
+  // let findUser = await User.findOne({_id: req.params.id})
+  let arr = []
+  let findOwnLists = await List.find({owner: req.params.id, deleted: false})
+  let findOtherLists = await List.find({deleted: false}).populate('owner', 'nick _id')
+  findOtherLists.map(x =>
+    x.readers.includes(req.params.id) ? arr.push(x) : null
+  )
+  let data = {OwnList: findOwnLists.reverse(),
+              OtherLists:arr.reverse()}
+  res.send(data);
   })
 .post(async function (req, res) {
-  let findUser = await User.findOne({nick: req.params.nick})
-  let createdList = await new List({
-    owner: findUser._id,
-    title : req.body.title
-  })
-  await createdList.save()
-  res.status(201).send(req.body)
+  let readers =[]
+  let findUser = await User.findOne({_id: req.params.id})
+  let findList = await List.find({deleted: false, title: req.body.title, owner: {_id : req.params.id}}).populate('owner', ' _id')
+  console.log(findList)
+  if (findList.length < 1){
+    let findReaders = await User.find({nick: {$in :req.body.shareWith}}).distinct('_id')
+    let createdList = await new List({
+      owner: req.params.id,
+      title : req.body.title,
+      readers: findReaders
+    })
+    await createdList.save()
+    res.status(201).send(req.body)
+  } else {
+    res.status(400).json({ message: 'List already exists' })
+  }
+
 });
 
 app.post('/delete/:nick/:listName', async function (req, res){
   let findUser = await User.findOne({nick: req.params.nick})
-  let findLists = await List.updateOne({owner: findUser._id, title: req.params.listName, deleted: false},
+  let findLists = await List.updateOne({owner: findUser._id,
+    title: req.params.listName, deleted: false},
     {deleted: true}, (err) => {});
   console.log(findLists)
   res.json(findLists)
@@ -157,25 +173,26 @@ app.post('/delete/:nick/:listName', async function (req, res){
 
 app.route('/lists/:nick/:listName')
 .get(async function (req, res) {
-  let findUser = await User.findOne({nick: req.params.nick})
-  let findLists = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
-  res.send(findLists.items);
+  let findLists = await List.findOne({owner: req.params.nick,
+    title: req.params.listName, deleted: false})
+  res.send(findLists.items.reverse());
   })
 .post(async function (req, res) {
   console.log(req.body)
   let findUser = await User.findOne({nick: req.params.nick})
-  let createdList = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
+  let createdList = await List.findOne({owner: findUser._id,
+    title: req.params.listName, deleted: false })
   createdList.items.push({text: req.body.title})
   await createdList.save()
   res.send(createdList.items)
 });
 
 app.post('/check/:nick/:listName', async function (req, res){
-  let findUser = await User.findOne({nick: req.params.nick})
-  let findLists = await List.findOne({owner: findUser._id, title: req.params.listName, deleted: false})
+  let findLists = await List.findOne({owner: req.params.nick,
+    title: req.params.listName, deleted: false})
   findLists.items.map(x =>
     (x.text === req.body.title ?
-      (x.checked === false ? x.checked = true : x.checked = false):
+      (x.checked === false ? x.checked = true : null):
         null)
   )
   await findLists.save()
@@ -183,15 +200,15 @@ app.post('/check/:nick/:listName', async function (req, res){
   res.json(findLists)
 })
 // ;(async () =>{
-//   let newUser = new User
-//   newUser.nick ="user"
-//   newUser.password = setPassword("password")
-//   await newUser.save()
-//
+// //   let newUser = new User
+// //   newUser.nick ="user"
+// //   newUser.password = setPassword("password")
+// //   await newUser.save()
+// //
 //   let newList = new List
-//   newList.owner = newUser._id;
-//   newList.readers = ["5cd6d322ff78bf38f3901251", "5cd6d1e160cfec3862f66d79"]
-//   newList.title = "title"
+//   newList.owner = '5cf18a8bfcc2eb13298a9804';
+//   newList.readers = ["5ced761c485d4b548c0a26a9", "5cf18a8bfcc2eb13298a9804"]
+//   newList.title = "Shared list(Karyna)"
 //   newList.deleted = false
 //   newList.items = [{text: "text", checked: false},{text: "item", checked: true}]
 //   await newList.save()
